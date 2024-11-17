@@ -1,0 +1,12 @@
+bs4
+langchain
+langchain-together
+monsterapi==1.0.2b3
+pinecone
+predictionguard
+pydantic
+pymongo
+pypdf2
+python-dotenv
+spacy
+PyCryptodome
