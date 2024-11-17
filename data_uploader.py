@@ -6,13 +6,13 @@ import tqdm
 from pymongo import MongoClient
 from pymongo.errors import CollectionInvalid
 from pinecone import Pinecone, ServerlessSpec
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.embeddings import OpenAIEmbeddings
 
 # Load environment variables from the .env file
 load_dotenv()
 
-# Initialize embeddings using HuggingFace
-embedding_model = HuggingFaceEmbeddings(model_name="all-mpnet-base-v2")
+# Initialize embeddings
+embedding_model = OpenAIEmbeddings(model="text-embedding-ada-002")
 
 # MongoDB connection setup
 mongo_uri = os.getenv("MONGO_URI")  # Get MongoDB URI from the environment variable
