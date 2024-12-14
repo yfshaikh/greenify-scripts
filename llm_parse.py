@@ -1,5 +1,7 @@
 import sys
 import os
+# add the parent directory of the script to the Python module search path, 
+# allowing it to import modules from that directory, like llm.together_textgen
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from llm.together_textgen import text_generator as together_text_generator
@@ -10,10 +12,11 @@ import tqdm
 import threading
 import time
 
-# Default to using TogetherAI's text generation
+# use TogetherAI's text generation
 generate_text_function = together_text_generator
 
-# Helper function to generate a structured prompt for analysis
+# helper function to generate a structured prompt for analysis
+# formats the prompt with the page_data to extract key metrics from the page
 def generate_prompt(page_data):
     return """
 You are an analyst extracting key metrics and points from a page in an official document.
@@ -105,38 +108,39 @@ Provide analysis output for the following data, as a JSON list:\n
 ```start""" + str(page_data) + "end```## Output\n"""
 
 
-# Create directory for parsed results if it doesn't exist
+# create directory for parsed results
 if not os.path.exists('parsed'):
     os.mkdir('parsed')
 
-# Load company data
+# load company data
 with open("database.json", 'r') as database_file:
     company_data = json.load(database_file)
 
-# Process each company's data
+# process each company's data
 for company_name in company_data.keys():
     for report_year in company_data[company_name]:
         print(f"Processing {company_name}, {report_year}")
 
-        # File paths for input and parsed output
+        # file paths for input and parsed output
         source_path = os.path.join('text', company_name, f"{report_year}.json")
         destination_path = os.path.join('parsed', company_name, f"{report_year}.json")
 
-        # Skip already processed files
+        # skip already processed files
         if os.path.exists(destination_path):
             continue
 
-        # Ensure parent directories exist
+        # ensure parent directories exist
         parent_directory = os.path.join('parsed', company_name)
         if not os.path.exists(parent_directory):
             os.mkdir(parent_directory)
 
-        # Initialize parsed data container
-        parsed_results = []
+        parsed_results = [] # store the parsed data
+        # reads the input JSON file (source_path), which contains the raw data of the document, 
+        # and loads it into the document_data variable
         with open(source_path, 'r') as source_file:
             document_data = json.load(source_file)
 
-        # Threaded task to process a page
+        # threaded task to process a page
         def process_page_in_thread(page_content):
             try:
                 result = generate_text_function(generate_prompt(page_content))
@@ -153,7 +157,7 @@ for company_name in company_data.keys():
                 except Exception as retry_error:
                     print(f"Retry failed for {company_name}, {report_year}: {retry_error}")
 
-        # Manage threading for processing document pages
+        # manage threading for processing document pages
         threads = []
         num_threads = 4
         for batch_index in tqdm.tqdm(range(len(document_data['pages']) // num_threads)):
@@ -165,6 +169,6 @@ for company_name in company_data.keys():
             for thread in threads:
                 thread.join()
 
-        # Save parsed results
+        # save parsed results
         with open(destination_path, 'w') as destination_file:
             json.dump({'parsed_pages': parsed_results}, destination_file)

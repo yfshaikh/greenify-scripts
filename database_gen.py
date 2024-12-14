@@ -3,43 +3,45 @@ from bs4 import BeautifulSoup
 import os
 import json
 
-# Define the companies to fetch reports for
+# companies to fetch reports for
 companies = [
     'cbre'
 ]
 
-# Define the cutoff year for fetching reports
-OLDEST_YEAR = 2021
+# cutoff year for fetching reports
+OLDEST_YEAR = 2023
 
-# Define the base URLs used for constructing search and report URLs
+# base URLs used for constructing search and report URLs
 BASE_SEARCH_URL = "https://www.responsibilityreports.com/Companies?search="
 BASE_REPORT_URL = "https://www.responsibilityreports.com"
 
-# Load previously stored data if available
+# load previously stored data if available
 data_file = 'database.json'
 data = {}
 if os.path.exists(data_file):
     with open(data_file, 'r') as f:
         data = json.load(f)
 
-# Utility to construct the full search URL
+# function to construct the full search URL
 def construct_search_url(company_name):
     return f"{BASE_SEARCH_URL}{company_name}"
 
-# Utility to construct the full report URL
+# function to construct the full report URL
 def construct_full_url(relative_url):
     return f"{BASE_REPORT_URL}{relative_url}"
 
-# Main function to process a single company
+# main function
+# responsible for processing a single company, downloading its most 
+# recent and archived reports, and saving them locally
 def process_company(company_name):
-    # Create 'data' directory if it doesn't exist
     os.makedirs('data', exist_ok=True)
 
-    # Fetch the search page for the company
+    # fetch the search page for the company
     search_response = requests.get(construct_search_url(company_name))
     search_soup = BeautifulSoup(search_response.text, 'html.parser')
+    # print(search_soup)
 
-    # Extract the first company's information from the search results
+    # extract the first company's info from the search results
     company_element = search_soup.find('span', class_='companyName')
     if not company_element:
         print(f"No results found for {company_name}")
@@ -48,35 +50,56 @@ def process_company(company_name):
     company_link = company_element.find('a')
     company_title = company_link.text.strip()
 
-    # Skip if the company is already processed
+    # skip if the company is already processed
     if company_title in data:
         print(f"{company_title} already processed.")
         return
 
-    # Initialize data storage for the company
+    # initialize data storage for the company
     data[company_title] = []
     company_url = construct_full_url(company_link['href'])
+    print(company_url)
 
-    # Fetch the company's main page
+    # fetch the company's main page
     company_response = requests.get(company_url)
     company_soup = BeautifulSoup(company_response.text, 'html.parser')
+    # print(company_soup)
 
-    # Directory to store reports for this company
+    # directory to store reports for this company
     company_dir = os.path.join('data', company_title)
     os.makedirs(company_dir, exist_ok=True)
 
-    # Download the most recent report
+   # Download the most recent report
     try:
         recent_report_section = company_soup.find('div', class_='most_recent_content_block')
+        
         if recent_report_section:
-            recent_link = recent_report_section.find('a', class_='view_btn')
-            recent_year = recent_link.text.strip()[:4]
-            if int(recent_year) >= OLDEST_YEAR:
-                save_report(recent_link['href'], recent_year, company_dir, company_title)
+            # locate the link within the 'view_btn' div
+            view_btn_div = recent_report_section.find('div', class_='view_btn')
+            if view_btn_div:
+                recent_link = view_btn_div.find('a', class_='btn_form_10k')
+                if recent_link and recent_link.text.strip():
+                    # extract the year from the text content
+                    recent_year_text = recent_report_section.find('span', class_='bold_txt').text.strip()
+                    recent_year = recent_year_text[:4]
+                    print(f"Most recent report year: {recent_year}")  
+                    
+                    # save the report if the year meets the cutoff
+                    if int(recent_year) >= OLDEST_YEAR:
+                        save_report(recent_link['href'], recent_year, company_dir, company_title)
+                    else:
+                        print(f"Report year {recent_year} is older than the cutoff ({OLDEST_YEAR}).")
+                else:
+                    print(f"No valid link found in the 'view_btn' section for {company_title}.")
+            else:
+                print(f"No 'view_btn' div found in the most recent report section for {company_title}.")
+        else:
+            print(f"No 'most_recent_content_block' section found for {company_title}.")
     except Exception as e:
         print(f"Failed to download the most recent report for {company_title}: {e}")
 
-    # Download archived reports
+
+    # download archived reports
     try:
         archived_reports = company_soup.find_all('span', class_='btn_archived download')
         for report in archived_reports:
@@ -87,7 +110,7 @@ def process_company(company_name):
     except Exception as e:
         print(f"Failed to download archived reports for {company_title}: {e}")
 
-# Function to save a report PDF locally
+# function to save a report PDF locally
 def save_report(relative_url, year, directory, company_title):
     report_url = construct_full_url(relative_url)
     response = requests.get(report_url)
@@ -98,10 +121,10 @@ def save_report(relative_url, year, directory, company_title):
     data[company_title].append(year)
     print(f"Saved report for {company_title} ({year}).")
 
-# Process each company in the list
+# process each company in the list
 for company in companies:
     process_company(company)
 
-# Save the updated data to the database file
+# save the updated data to the database file
 with open(data_file, 'w') as f:
     json.dump(data, f, indent=4)
